@@ -2,6 +2,8 @@ import numpy as np
 from scipy.stats import ks_2samp
 from statsmodels.tsa.stattools import acf
 from esig import stream2sig
+from scipy.stats import chi2
+
 
 
 def correlation_error(fakes, real):
@@ -195,3 +197,51 @@ def mmd_signature(x, y, order=3, window_size=20):
     y_sigs = tosignature(y_paths, order)
 
     return mmd(x_sigs, y_sigs)
+
+def pof_test(
+    var: np.ndarray,
+    target: np.ndarray,
+    alpha: float = 0.99,
+) -> float:
+    """
+    Kupiec’s Proportion of Failure Test (POF). Tests that a number of exceptions
+    corresponds to the VaR confidence level.
+
+    Parameters:
+        var: Predicted VaRs.
+        target: Corresponded returns.
+        alpha: VaR confidence level. Default is 0.99.
+
+    Returns:
+        p-value of POF test.
+    """
+    exception = target < var
+    t = len(target)
+    m = exception.sum()
+    nom = (1 - alpha)**m * alpha**(t-m)
+    den = (1 - m/t)**(t - m) * (m / t)**m
+    lr_pof = -2 * np.log(nom / den)
+    pvalue = 1 - chi2.cdf(lr_pof, df=1)
+    return pvalue
+
+
+def quantile_loss(var : np.ndarray, target: np.ndarray, alpha : float = 0.99) -> float:
+    """
+    Quantile loss also known as Pinball loss. Measures the discrepancy between
+    true values and a corresponded 1-alpha quantile.
+
+    Parameters:
+        var:
+            Predicted VaRs.
+        target:
+            Corresponded returns.
+        alpha:
+            VaR confidence level. Default is 0.99.
+
+    Returns:
+        The avarage value of the quantile loss function.
+    """
+    qloss = np.abs(var-target)
+    qloss[target < var] = qloss[target < var] * 2 * alpha
+    qloss[target >= var] = qloss[target >= var] * 2 * (1 - alpha)
+    return qloss.mean()
